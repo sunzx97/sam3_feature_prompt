@@ -286,9 +286,11 @@ def _create_geometry_encoder():
         points_direct_project=True,
         points_pool=True,
         points_pos_enc=True,
-        boxes_direct_project=True,
+        # boxes_direct_project=True,
+        boxes_direct_project=False, # szx
         boxes_pool=True,
-        boxes_pos_enc=True,
+        # boxes_pos_enc=True,
+        boxes_pos_enc=False, # szx
         d_model=256,
         num_layers=3,
         layer=geo_layer,

@@ -125,7 +125,9 @@ class Sam3Processor:
         return self._forward_grounding(state)
 
     @torch.inference_mode()
-    def add_geometric_prompt(self, box: List, label: bool, state: Dict):
+    def add_geometric_prompt(self, state: Dict, box=None, label=None, cache_path=None, load_from_cache=False,
+                             camera_code=None,feature_prompt=None,feature_prompt_mask=None
+                             ):
         """Adds a box prompt and run the inference.
         The image needs to be set, but not necessarily the text prompt.
         The box is assumed to be in [center_x, center_y, width, height] format and normalized in [0, 1] range.
@@ -145,9 +147,16 @@ class Sam3Processor:
             state["geometric_prompt"] = self.model._get_dummy_prompt()
 
         # adding a batch and sequence dimension
-        boxes = torch.tensor(box, device=self.device, dtype=torch.float32).view(1, 1, 4)
-        labels = torch.tensor([label], device=self.device, dtype=torch.bool).view(1, 1)
-        state["geometric_prompt"].append_boxes(boxes, labels)
+        if box:
+            boxes = torch.tensor(box, device=self.device, dtype=torch.float32).view(1, 1, 4)
+            labels = torch.tensor([label], device=self.device, dtype=torch.bool).view(1, 1)
+            state["geometric_prompt"].append_boxes(boxes, labels)
+
+        state["load_from_cache"] = load_from_cache
+        state["cache_path"] = cache_path
+        state["feature_prompt"] = feature_prompt
+        state["feature_prompt_mask"] = feature_prompt_mask
+        state["camera_code"] = camera_code
 
         return self._forward_grounding(state)
 
@@ -186,6 +195,12 @@ class Sam3Processor:
             find_input=self.find_stage,
             geometric_prompt=state["geometric_prompt"],
             find_target=None,
+            cache_path=state.get("cache_path", None),
+            load_from_cache=state.get("load_from_cache", False),
+            camera_code=state.get("camera_code", None),
+            feature_prompt = state.get("feature_prompt", None),
+            feature_prompt_mask = state.get("feature_prompt_mask", None)
+
         )
 
         out_bbox = outputs["pred_boxes"]

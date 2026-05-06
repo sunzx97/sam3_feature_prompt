@@ -5,6 +5,7 @@
 import os
 from copy import deepcopy
 from typing import Dict, List, Optional, Tuple
+import pickle
 
 import numpy as np
 import torch
@@ -173,7 +174,18 @@ class Sam3Image(torch.nn.Module):
         visual_prompt_mask=None,
         encode_text=True,
         prev_mask_pred=None,
+        cache_path=None,
+        load_from_cache=False,
+        camera_code = None,
+        feature_prompt=None,
+        feature_prompt_mask=None,
     ):
+        if load_from_cache and feature_prompt is not None and feature_prompt_mask is not None:
+            try:
+                return feature_prompt, feature_prompt_mask, backbone_out
+            except Exception as e:
+                print(f"Warning: Failed to load cache from {cache_path}: {e}")
+
         # index text features (note that regardless of early or late fusion, the batch size of
         # `txt_feats` is always the number of *prompts* in the encoder)
         txt_ids = find_input.text_ids
@@ -207,6 +219,35 @@ class Sam3Image(torch.nn.Module):
         else:
             prompt = torch.cat([geo_feats, visual_prompt_embed], dim=0)
             prompt_mask = torch.cat([geo_masks, visual_prompt_mask], dim=1)
+
+        if cache_path is not None and not load_from_cache and camera_code is not None:
+            try:
+                cache_dir = os.path.dirname(cache_path)
+                if cache_dir and not os.path.exists(cache_dir):
+                    os.makedirs(cache_dir, exist_ok=True)
+
+                all_cached_data = {}
+                if os.path.exists(cache_path):
+                    try:
+                        with open(cache_path, 'rb') as f:
+                            all_cached_data = pickle.load(f)
+                    except:
+                        all_cached_data = {}
+
+                if camera_code not in all_cached_data:
+                    all_cached_data[camera_code] = []
+
+                all_cached_data[camera_code].append({
+                    'prompt': prompt.cpu(),
+                    'prompt_mask': prompt_mask.cpu()
+                })
+
+                with open(cache_path, 'wb') as f:
+                    pickle.dump(all_cached_data, f)
+                print(f"Saved cache for camera={camera_code}")
+            except Exception as e:
+                print(f"Warning: Failed to save cache to {cache_path}: {e}")
+
         return prompt, prompt_mask, backbone_out
 
     def _run_encoder(
@@ -443,11 +484,23 @@ class Sam3Image(torch.nn.Module):
         find_input,
         find_target,
         geometric_prompt: Prompt,
+        cache_path: str = None,
+        load_from_cache: bool = False,
+        camera_code: str = None,
+        feature_prompt: torch.Tensor = None,
+        feature_prompt_mask: torch.Tensor = None,
         **kwargs,
     ):
         with torch.profiler.record_function("SAM3Image._encode_prompt"):
             prompt, prompt_mask, backbone_out = self._encode_prompt(
-                backbone_out, find_input, geometric_prompt
+                backbone_out=backbone_out,
+                find_input=find_input,
+                geometric_prompt=geometric_prompt,
+                cache_path=cache_path,
+                load_from_cache=load_from_cache,
+                camera_code=camera_code,
+                feature_prompt=feature_prompt,
+                feature_prompt_mask=feature_prompt_mask,
             )
         # Run the encoder
         with torch.profiler.record_function("SAM3Image._run_encoder"):
